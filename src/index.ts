@@ -12,17 +12,15 @@ app.get('/', (c) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>STX Rain - Live Stacks Transactions</title>
+  <title>STX Storm - Live Stacks Transactions</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
-      background: #0a0a0f;
+      background: #0a0a12;
       overflow: hidden;
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, monospace;
     }
-    canvas {
-      display: block;
-    }
+    canvas { display: block; }
     .stats {
       position: fixed;
       top: 20px;
@@ -30,26 +28,26 @@ app.get('/', (c) => {
       color: #fff;
       font-size: 14px;
       z-index: 100;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0,0,0,0.8);
       padding: 15px 20px;
       border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
     }
     .stats h1 {
       font-size: 24px;
       margin-bottom: 10px;
-      background: linear-gradient(90deg, #5546ff, #00d4ff);
+      background: linear-gradient(90deg, #ffd93d, #fff, #ffd93d);
       -webkit-background-clip: text;
       -webkit-text-fill-color: transparent;
+      animation: flicker 0.5s ease-in-out infinite alternate;
     }
-    .stats .stat {
-      margin: 5px 0;
-      color: #888;
+    @keyframes flicker {
+      0% { opacity: 1; }
+      100% { opacity: 0.8; }
     }
-    .stats .stat span {
-      color: #fff;
-      font-weight: bold;
-    }
+    .stats .stat { margin: 5px 0; color: #888; }
+    .stats .stat span { color: #fff; font-weight: bold; }
     .legend {
       position: fixed;
       bottom: 20px;
@@ -57,22 +55,14 @@ app.get('/', (c) => {
       color: #fff;
       font-size: 12px;
       z-index: 100;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0,0,0,0.8);
       padding: 15px 20px;
       border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.1);
+      backdrop-filter: blur(10px);
     }
-    .legend-item {
-      display: flex;
-      align-items: center;
-      margin: 5px 0;
-    }
-    .legend-dot {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      margin-right: 10px;
-    }
+    .legend-item { display: flex; align-items: center; margin: 5px 0; }
+    .legend-icon { width: 20px; margin-right: 10px; text-align: center; }
     .latest {
       position: fixed;
       top: 20px;
@@ -80,54 +70,51 @@ app.get('/', (c) => {
       color: #fff;
       font-size: 12px;
       z-index: 100;
-      background: rgba(0,0,0,0.7);
+      background: rgba(0,0,0,0.8);
       padding: 15px 20px;
       border-radius: 12px;
       border: 1px solid rgba(255,255,255,0.1);
-      max-width: 350px;
-      max-height: 300px;
+      backdrop-filter: blur(10px);
+      max-width: 320px;
+      max-height: 280px;
       overflow: hidden;
     }
-    .latest h3 {
-      margin-bottom: 10px;
-      color: #888;
-    }
+    .latest h3 { margin-bottom: 10px; color: #888; }
     .tx-item {
-      padding: 8px 0;
+      padding: 6px 0;
       border-bottom: 1px solid rgba(255,255,255,0.1);
       font-family: monospace;
+      font-size: 11px;
     }
-    .tx-item:last-child {
-      border-bottom: none;
-    }
-    .tx-amount {
-      font-weight: bold;
-    }
-    .tx-type {
-      font-size: 10px;
-      padding: 2px 6px;
-      border-radius: 4px;
-      margin-left: 8px;
+    .tx-item:last-child { border-bottom: none; }
+    .flash {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: white;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 50;
     }
   </style>
 </head>
 <body>
+  <div class="flash" id="flash"></div>
+
   <div class="stats">
-    <h1>⚡ STX RAIN</h1>
+    <h1>⛈️ STX STORM</h1>
     <div class="stat">Transactions: <span id="txCount">0</span></div>
-    <div class="stat">Total Volume: <span id="volume">0</span> STX</div>
-    <div class="stat">Latest Block: <span id="block">...</span></div>
+    <div class="stat">Volume: <span id="volume">0</span> STX</div>
+    <div class="stat">Block: <span id="block">...</span></div>
   </div>
 
   <div class="legend">
-    <div class="legend-item"><div class="legend-dot" style="background: #5546ff;"></div> STX Transfer</div>
-    <div class="legend-item"><div class="legend-dot" style="background: #00d4ff;"></div> Contract Call</div>
-    <div class="legend-item"><div class="legend-dot" style="background: #ff6b6b;"></div> Token Transfer</div>
-    <div class="legend-item"><div class="legend-dot" style="background: #ffd93d;"></div> Contract Deploy</div>
+    <div class="legend-item"><span class="legend-icon">🌧️</span> Transfer (size = amount)</div>
+    <div class="legend-item"><span class="legend-icon">⚡</span> Contract Deploy</div>
+    <div class="legend-item"><span class="legend-icon">🌩️</span> Contract Call</div>
   </div>
 
   <div class="latest">
-    <h3>Latest Transactions</h3>
+    <h3>Latest Activity</h3>
     <div id="txList"></div>
   </div>
 
@@ -136,6 +123,7 @@ app.get('/', (c) => {
   <script>
     const canvas = document.getElementById('canvas');
     const ctx = canvas.getContext('2d');
+    const flash = document.getElementById('flash');
 
     let width = canvas.width = window.innerWidth;
     let height = canvas.height = window.innerHeight;
@@ -145,106 +133,210 @@ app.get('/', (c) => {
       height = canvas.height = window.innerHeight;
     });
 
-    // Raindrop class
-    class Drop {
-      constructor(tx) {
-        this.tx = tx;
-        this.x = Math.random() * width;
-        this.y = -50;
-        this.speed = 2 + Math.random() * 3;
-
-        // Size based on STX amount (log scale)
-        const amount = tx.amount || 1;
-        this.size = Math.min(50, Math.max(4, Math.log10(amount + 1) * 8));
-
-        // Color based on type
-        this.color = this.getColor(tx.type);
-
-        // Trail effect
-        this.trail = [];
-        this.maxTrail = 15;
-
-        // Glow intensity
-        this.glow = Math.min(30, this.size);
-      }
-
-      getColor(type) {
-        switch(type) {
-          case 'token_transfer': return '#5546ff';
-          case 'contract_call': return '#00d4ff';
-          case 'smart_contract': return '#ffd93d';
-          case 'coinbase': return '#00ff88';
-          default: return '#5546ff';
-        }
-      }
-
-      update() {
-        // Add current position to trail
-        this.trail.push({ x: this.x, y: this.y });
-        if (this.trail.length > this.maxTrail) {
-          this.trail.shift();
-        }
-
-        this.y += this.speed;
-
-        // Slight horizontal drift
-        this.x += (Math.random() - 0.5) * 0.5;
-
-        return this.y < height + 100;
-      }
-
-      draw() {
-        // Draw trail
-        for (let i = 0; i < this.trail.length; i++) {
-          const t = this.trail[i];
-          const alpha = (i / this.trail.length) * 0.3;
-          const size = (i / this.trail.length) * this.size * 0.5;
-
-          ctx.beginPath();
-          ctx.arc(t.x, t.y, size, 0, Math.PI * 2);
-          ctx.fillStyle = this.color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
-          ctx.fill();
-        }
-
-        // Draw glow
-        const gradient = ctx.createRadialGradient(
-          this.x, this.y, 0,
-          this.x, this.y, this.size * 2
-        );
-        gradient.addColorStop(0, this.color + '80');
-        gradient.addColorStop(1, this.color + '00');
-
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size * 2, 0, Math.PI * 2);
-        ctx.fillStyle = gradient;
-        ctx.fill();
-
-        // Draw main drop
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-        ctx.fillStyle = this.color;
-        ctx.fill();
-
-        // Inner highlight
-        ctx.beginPath();
-        ctx.arc(this.x - this.size * 0.3, this.y - this.size * 0.3, this.size * 0.3, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        ctx.fill();
+    // Audio context for thunder
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
       }
     }
 
-    // Particle system for splash effect
+    function playThunder(intensity = 0.3) {
+      if (!audioCtx) return;
+      const duration = 0.3 + Math.random() * 0.4;
+      const oscillator = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+
+      oscillator.type = 'sawtooth';
+      oscillator.frequency.setValueAtTime(80 + Math.random() * 40, audioCtx.currentTime);
+      oscillator.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + duration);
+
+      gainNode.gain.setValueAtTime(intensity, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + duration);
+
+      oscillator.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+
+      oscillator.start();
+      oscillator.stop(audioCtx.currentTime + duration);
+    }
+
+    // Raindrop class for transfers
+    class Raindrop {
+      constructor(tx) {
+        this.tx = tx;
+        this.x = Math.random() * width;
+        this.y = -20;
+
+        // Size based on amount (log scale, min 2, max 8)
+        const amount = tx.amount || 1;
+        const logAmount = Math.log10(amount + 1);
+        this.length = Math.min(40, Math.max(8, logAmount * 6));
+        this.width = Math.min(3, Math.max(1, logAmount * 0.4));
+
+        this.speed = 8 + Math.random() * 8 + (this.length / 10);
+        this.opacity = 0.4 + Math.random() * 0.4;
+      }
+
+      update() {
+        this.y += this.speed;
+        this.x += 1; // Slight wind
+        return this.y < height + 50;
+      }
+
+      draw() {
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(this.x - this.length * 0.2, this.y - this.length);
+        ctx.strokeStyle = \`rgba(150, 180, 255, \${this.opacity})\`;
+        ctx.lineWidth = this.width;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+      }
+    }
+
+    // Lightning class for contract deploys
+    class Lightning {
+      constructor(x) {
+        this.x = x || Math.random() * width;
+        this.segments = this.generateBolt();
+        this.life = 1;
+        this.branches = [];
+
+        // Generate branches
+        for (let i = 0; i < 3; i++) {
+          if (Math.random() > 0.4) {
+            const startIdx = Math.floor(Math.random() * (this.segments.length - 2)) + 1;
+            this.branches.push({
+              start: this.segments[startIdx],
+              segments: this.generateBranch(this.segments[startIdx])
+            });
+          }
+        }
+      }
+
+      generateBolt() {
+        const segments = [];
+        let x = this.x;
+        let y = 0;
+
+        while (y < height) {
+          segments.push({ x, y });
+          y += 20 + Math.random() * 40;
+          x += (Math.random() - 0.5) * 80;
+        }
+        segments.push({ x, y: height });
+        return segments;
+      }
+
+      generateBranch(start) {
+        const segments = [{ x: start.x, y: start.y }];
+        let x = start.x;
+        let y = start.y;
+        const angle = (Math.random() - 0.5) * Math.PI * 0.5;
+        const length = 50 + Math.random() * 100;
+
+        for (let i = 0; i < 4; i++) {
+          x += Math.cos(angle) * (length / 4) + (Math.random() - 0.5) * 20;
+          y += Math.sin(angle) * (length / 4) + 20;
+          segments.push({ x, y });
+        }
+        return segments;
+      }
+
+      update() {
+        this.life -= 0.08;
+        return this.life > 0;
+      }
+
+      draw() {
+        const alpha = this.life;
+
+        // Main bolt glow
+        ctx.shadowBlur = 30;
+        ctx.shadowColor = \`rgba(200, 220, 255, \${alpha})\`;
+
+        // Draw main bolt
+        ctx.beginPath();
+        ctx.moveTo(this.segments[0].x, this.segments[0].y);
+        for (let i = 1; i < this.segments.length; i++) {
+          ctx.lineTo(this.segments[i].x, this.segments[i].y);
+        }
+        ctx.strokeStyle = \`rgba(255, 255, 255, \${alpha})\`;
+        ctx.lineWidth = 3;
+        ctx.stroke();
+
+        // Inner bright core
+        ctx.beginPath();
+        ctx.moveTo(this.segments[0].x, this.segments[0].y);
+        for (let i = 1; i < this.segments.length; i++) {
+          ctx.lineTo(this.segments[i].x, this.segments[i].y);
+        }
+        ctx.strokeStyle = \`rgba(255, 255, 255, \${alpha})\`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Draw branches
+        this.branches.forEach(branch => {
+          ctx.beginPath();
+          ctx.moveTo(branch.segments[0].x, branch.segments[0].y);
+          for (let i = 1; i < branch.segments.length; i++) {
+            ctx.lineTo(branch.segments[i].x, branch.segments[i].y);
+          }
+          ctx.strokeStyle = \`rgba(200, 220, 255, \${alpha * 0.6})\`;
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        });
+
+        ctx.shadowBlur = 0;
+      }
+    }
+
+    // Thunder rumble effect for contract calls
+    class Thunder {
+      constructor() {
+        this.life = 1;
+        this.intensity = 0.1 + Math.random() * 0.15;
+      }
+
+      update() {
+        this.life -= 0.02;
+        return this.life > 0;
+      }
+
+      draw() {
+        // Screen shake/flash effect
+        if (this.life > 0.8) {
+          const shake = (this.life - 0.8) * 50;
+          ctx.save();
+          ctx.translate(
+            (Math.random() - 0.5) * shake,
+            (Math.random() - 0.5) * shake
+          );
+        }
+
+        // Dim purple flash for thunder
+        const flashAlpha = this.life * this.intensity;
+        ctx.fillStyle = \`rgba(100, 80, 150, \${flashAlpha})\`;
+        ctx.fillRect(0, 0, width, height);
+
+        if (this.life > 0.8) {
+          ctx.restore();
+        }
+      }
+    }
+
+    // Splash for when rain hits bottom
     class Splash {
-      constructor(x, y, color) {
+      constructor(x) {
         this.particles = [];
-        for (let i = 0; i < 8; i++) {
-          const angle = (Math.PI * 2 / 8) * i;
+        for (let i = 0; i < 5; i++) {
+          const angle = Math.PI + (Math.random() - 0.5) * Math.PI * 0.8;
           this.particles.push({
-            x, y,
-            vx: Math.cos(angle) * (2 + Math.random() * 2),
-            vy: Math.sin(angle) * (2 + Math.random() * 2) - 2,
-            life: 1,
-            color
+            x, y: height - 5,
+            vx: Math.cos(angle) * (1 + Math.random() * 2),
+            vy: Math.sin(angle) * (2 + Math.random() * 2),
+            life: 1
           });
         }
       }
@@ -253,8 +345,8 @@ app.get('/', (c) => {
         this.particles = this.particles.filter(p => {
           p.x += p.vx;
           p.y += p.vy;
-          p.vy += 0.1; // gravity
-          p.life -= 0.03;
+          p.vy += 0.2;
+          p.life -= 0.05;
           return p.life > 0;
         });
         return this.particles.length > 0;
@@ -263,19 +355,31 @@ app.get('/', (c) => {
       draw() {
         this.particles.forEach(p => {
           ctx.beginPath();
-          ctx.arc(p.x, p.y, 3 * p.life, 0, Math.PI * 2);
-          ctx.fillStyle = p.color + Math.floor(p.life * 255).toString(16).padStart(2, '0');
+          ctx.arc(p.x, p.y, 1.5 * p.life, 0, Math.PI * 2);
+          ctx.fillStyle = \`rgba(150, 180, 255, \${p.life * 0.5})\`;
           ctx.fill();
         });
       }
     }
 
-    let drops = [];
+    let raindrops = [];
+    let lightnings = [];
+    let thunders = [];
     let splashes = [];
     let seenTxs = new Set();
     let totalTxs = 0;
     let totalVolume = 0;
     let latestTxs = [];
+
+    // Screen flash for lightning
+    function screenFlash() {
+      flash.style.transition = 'none';
+      flash.style.opacity = '0.8';
+      setTimeout(() => {
+        flash.style.transition = 'opacity 0.3s';
+        flash.style.opacity = '0';
+      }, 50);
+    }
 
     // Fetch transactions
     async function fetchTransactions() {
@@ -290,13 +394,28 @@ app.get('/', (c) => {
         data.transactions.forEach(tx => {
           if (!seenTxs.has(tx.tx_id)) {
             seenTxs.add(tx.tx_id);
-            drops.push(new Drop(tx));
             totalTxs++;
             totalVolume += (tx.amount || 0) / 1000000;
 
-            // Add to latest list
+            // Different effects based on type
+            if (tx.type === 'smart_contract') {
+              // CONTRACT DEPLOY = LIGHTNING
+              lightnings.push(new Lightning());
+              screenFlash();
+              initAudio();
+              setTimeout(() => playThunder(0.5), 100 + Math.random() * 300);
+            } else if (tx.type === 'contract_call') {
+              // CONTRACT CALL = THUNDER
+              thunders.push(new Thunder());
+              initAudio();
+              playThunder(0.2);
+            } else {
+              // TRANSFER = RAIN
+              raindrops.push(new Raindrop(tx));
+            }
+
             latestTxs.unshift(tx);
-            if (latestTxs.length > 5) latestTxs.pop();
+            if (latestTxs.length > 6) latestTxs.pop();
             updateLatestList();
           }
         });
@@ -312,56 +431,88 @@ app.get('/', (c) => {
     function updateLatestList() {
       const list = document.getElementById('txList');
       list.innerHTML = latestTxs.map(tx => {
-        const amount = ((tx.amount || 0) / 1000000).toFixed(2);
-        const typeColor = tx.type === 'token_transfer' ? '#5546ff' :
-                         tx.type === 'contract_call' ? '#00d4ff' :
-                         tx.type === 'smart_contract' ? '#ffd93d' : '#888';
+        const amount = ((tx.amount || 0) / 1000000).toFixed(4);
+        let icon = '🌧️';
+        let color = '#96b4ff';
+        if (tx.type === 'smart_contract') {
+          icon = '⚡';
+          color = '#ffd93d';
+        } else if (tx.type === 'contract_call') {
+          icon = '🌩️';
+          color = '#b8a0d0';
+        }
         return \`<div class="tx-item">
-          <span class="tx-amount" style="color: \${typeColor}">\${amount} STX</span>
-          <span class="tx-type" style="background: \${typeColor}22; color: \${typeColor}">\${tx.type}</span>
-          <div style="color: #666; font-size: 10px; margin-top: 4px;">\${tx.tx_id.slice(0, 20)}...</div>
+          <span style="margin-right: 6px;">\${icon}</span>
+          <span style="color: \${color}">\${amount} STX</span>
+          <span style="color: #666; margin-left: 8px;">\${tx.tx_id.slice(0, 12)}...</span>
         </div>\`;
       }).join('');
     }
 
     // Animation loop
     function animate() {
-      // Semi-transparent background for trail effect
-      ctx.fillStyle = 'rgba(10, 10, 15, 0.15)';
+      // Dark sky background with slight gradient
+      const gradient = ctx.createLinearGradient(0, 0, 0, height);
+      gradient.addColorStop(0, 'rgba(8, 8, 15, 0.3)');
+      gradient.addColorStop(1, 'rgba(10, 10, 18, 0.3)');
+      ctx.fillStyle = gradient;
       ctx.fillRect(0, 0, width, height);
 
-      // Update and draw drops
-      drops = drops.filter(drop => {
-        const alive = drop.update();
-        if (!alive && drop.y >= height - 50) {
-          splashes.push(new Splash(drop.x, height - 20, drop.color));
-        }
+      // Draw and update thunder effects (background)
+      thunders = thunders.filter(t => {
+        t.draw();
+        return t.update();
+      });
+
+      // Draw and update raindrops
+      raindrops = raindrops.filter(drop => {
         drop.draw();
+        const alive = drop.update();
+        if (!alive) {
+          splashes.push(new Splash(drop.x));
+        }
         return alive;
       });
 
-      // Update and draw splashes
-      splashes = splashes.filter(splash => {
-        const alive = splash.update();
-        splash.draw();
-        return alive;
+      // Draw and update splashes
+      splashes = splashes.filter(s => {
+        s.draw();
+        return s.update();
+      });
+
+      // Draw and update lightning (foreground)
+      lightnings = lightnings.filter(l => {
+        l.draw();
+        return l.update();
       });
 
       requestAnimationFrame(animate);
     }
 
+    // Ambient rain - always have some drops falling
+    function ambientRain() {
+      if (raindrops.length < 100) {
+        for (let i = 0; i < 3; i++) {
+          raindrops.push(new Raindrop({ amount: Math.random() * 100 }));
+        }
+      }
+    }
+
     // Start
     fetchTransactions();
     setInterval(fetchTransactions, 3000);
+    setInterval(ambientRain, 100);
     animate();
 
-    // Keep seen txs from growing too large
+    // Cleanup
     setInterval(() => {
       if (seenTxs.size > 1000) {
-        const arr = Array.from(seenTxs);
-        seenTxs = new Set(arr.slice(-500));
+        seenTxs = new Set(Array.from(seenTxs).slice(-500));
       }
     }, 60000);
+
+    // Init audio on first interaction
+    document.addEventListener('click', initAudio, { once: true });
   </script>
 </body>
 </html>`;
@@ -371,7 +522,6 @@ app.get('/', (c) => {
 // API endpoint for transactions
 app.get('/api/transactions', async (c) => {
   try {
-    // Fetch recent transactions from Hiro API
     const res = await fetch('https://api.hiro.so/extended/v1/tx?limit=20&unanchored=true');
 
     if (!res.ok) {
@@ -380,24 +530,17 @@ app.get('/api/transactions', async (c) => {
 
     const data = await res.json() as any;
 
-    // Get latest block
     const blockRes = await fetch('https://api.hiro.so/extended/v1/block?limit=1');
     const blockData = blockRes.ok ? await blockRes.json() as any : { results: [] };
     const latestBlock = blockData.results?.[0]?.height || null;
 
-    // Transform transactions
     const transactions = (data.results || []).map((tx: any) => {
       let amount = 0;
-      let type = tx.tx_type;
 
-      // Extract amount based on transaction type
       if (tx.tx_type === 'token_transfer') {
         amount = parseInt(tx.token_transfer?.amount || '0');
       } else if (tx.tx_type === 'contract_call') {
-        // Try to get amount from STX transfers in events
         amount = parseInt(tx.stx_sent || '0');
-      } else if (tx.tx_type === 'coinbase') {
-        amount = parseInt(tx.coinbase_payload?.data || '0');
       }
 
       return {
@@ -422,7 +565,6 @@ app.get('/api/transactions', async (c) => {
   }
 });
 
-// Health check
-app.get('/health', (c) => c.json({ status: 'raining', timestamp: new Date().toISOString() }));
+app.get('/health', (c) => c.json({ status: 'storming', timestamp: new Date().toISOString() }));
 
 export default app;
